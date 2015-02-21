@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!--
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+-->
+<html>
+    <head>
+        <title>TODO supply a title</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <!-- Bootstrap core CSS -->
+        <link href="./template/css/bootstrap.min.css" rel="stylesheet">
+        <!-- Custom styles for this template -->
+        <link href="./template/css/signin.css" rel="stylesheet">
+        <script src="./template/js/jquery-1.11.2.js"></script>
+        <script>
+            $(function () {
+                $("#login").click(function () {
+                    $.ajax({
+                        type: "POST",
+                        url: "./login",
+                        dataType:"json",
+                        cache: false,
+                        data: {username : "admin", password :"1234"},
+                        success:function (data) {
+                            $("body").html(data.toString());
+                            window.parent.location.href = window.parent.location.href;
+                            return;
+                            //window.location.href = "./home.html";
+                        }
+                    }); 
+                });
+            });
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <!--<form class="form-signin">-->
+            <div class="form-signin">
+            <h2 class="form-signin-heading"> Log In</h2>
+            <label for="inputEmail" class="sr-only">Email address</label>
+            <input type="email" id="username" class="form-control" placeholder="Email address" required autofocus>
+            <label for="inputPassword" class="sr-only">Password</label>
+            <input type="password" id="password" class="form-control" placeholder="Password" required>
+            <div class="checkbox">
+              <label><input type="checkbox" value="remember-me"> Remember me</label>
+            </div>
+            <button class="btn btn-lg btn-primary btn-block" name="login" id="login" type="submit" >Sign in</button>
+            <div id="result"></div>
+        <!--</form>-->
+        </div>
+        </div> <!-- /container -->
+        <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
+        <!--//<script src="../js/ie10-viewport-bug-workaround.js"></script>-->
+        </body>
+</html>
+
