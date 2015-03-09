@@ -5,8 +5,9 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-
-
+header('Access-Control-Allow-Origin: *');
+session_cache_limiter(false);
+session_start();
 
 require_once './include/DataHandler.php';
 require './libs/Slim/Slim.php';
@@ -14,8 +15,10 @@ require './libs/Slim/Slim.php';
 \Slim\Slim::registerAutoloader();
 
 $app = new \Slim\Slim(array(
-    'templates.path' => './template'
+    'templates.path' => './client'
 ));
+
+//$app->add(new Slim_Middleware_ContentTypes());
 
 
 //$app->get('/login(/)', 'login');
@@ -35,7 +38,7 @@ function authenticate(\Slim\Route $route) {
 
     // Verifying Authorization Header
     if (isset($headers['Authorization'])) {
-        $db = new DataHandler();
+        $db = new DbHandler();
 
         // get the api key
         $api_key = $headers['Authorization'];
@@ -59,10 +62,6 @@ function authenticate(\Slim\Route $route) {
         $app->stop();
     }
 }
-
-/**
- * Verifying required params posted or not
- */
 function verifyRequiredParams($required_fields) {
     $error = false;
     $error_fields = "";
@@ -91,7 +90,6 @@ function verifyRequiredParams($required_fields) {
         $app->stop();
     }
 }
-
 /**
  * Validating email address
  */
@@ -122,6 +120,83 @@ function echoRespnse($status_code, $response) {
 }
 
 /**
+ * Redirect to login page
+ * method - GET
+ */
+$app->get('/', function() use ($app){
+    if(isset($_SESSION['username'])){
+        $app->render('home.php');
+    }else{
+        $app->redirect('./login');
+    }
+});
+
+/**
+ * Login page
+ * url - /login
+ * method - GET
+ */
+$app->get('/login', function() use ($app){
+   $flash = $app->view()->getData('flash');
+   $msg_error = '';
+   if (isset($flash['msg_error'])) {
+      $msg_error = $flash['msg_error'];
+   }
+   $app->render('login.php', array('msg_error' => $msg_error));
+});
+
+$app->get("/logout", function () use ($app) {
+   unset($_SESSION['username']);
+   $app->view()->setData('username', null);
+   $app->redirect('./login');
+});
+
+/**
+ * User Login
+ * url - /login
+ * method - POST
+ * params - email, password
+ */
+$app->post('/login', function() use ($app) {
+    
+    //check for required params
+    verifyRequiredParams(array('username', 'password'));
+    // reading post params
+    $username = $app->request()->post('username');
+    $password = $app->request()->post('password');
+    
+    $response = array();
+    
+    $db = new DataHandler();
+    //check for correct username and password
+    $result = $db->check_login($username, $password);
+    if ($result['flag']) {
+        //get the user by email
+        $response["error"] = false;
+        $response['api_key'] = $result['msg'];
+        $response['message'] = 'Login succeed';
+        
+        $_SESSION['username'] = $username;
+        $_SESSION['password'] = $password;
+        $_SESSION['api_key'] = $result['msg'];
+        
+        $app->redirect('./');
+        
+    } else {
+        // user credentials are wrong
+        $app->flash('msg_error', $result['msg']);
+        $app->redirect('/fbserver/login');
+        $response['error'] = true;
+        $response['message'] = 'Login failed. ' . $result['msg'];
+    }
+//    echoRespnse(200, $response);
+});
+
+//$app->get('/home', function () use ($app) {
+//    //$app->render('home.html');
+//});  
+
+/**
  * Listing questionnaire
  * method GET
  * url /questionnaire          
@@ -143,6 +218,139 @@ $app->get('/group', function() {
     echoRespnse(200, $response);
 });
 
+$app->post('/group', function() use($app){
+    
+    verifyRequiredParams(array('name'));
+    // reading post params
+    $name = $app->request()->post('name');
+    //echo $name;
+    $response = array();
+    $db = new DataHandler();
+    if($db->check_group_name($name)){
+        $response['error'] = true;
+        $response['message'] = 'Group name has existed!';
+    }else{    
+        $result = $db->add_group($name);
+        if ($result) {
+            $response["error"] = false;
+            $response['message'] = 'Create succeed';
+        } else {
+            $response['error'] = true;
+            $response['message'] = 'Create failed.';
+        }
+    }
+    echoRespnse(200, $response);
+});
+
+$app->delete('/group/:name', function($name) use($app){
+    
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->delete_group($name);
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = 'Delete succeed';
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'Delete failed.';
+    }
+    
+    echoRespnse(200, $response);
+});
+
+/**
+ * Listing question
+ * method GET
+ * url /question
+ */
+$app->get('/question', function() use($app){
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->get_question();
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = $result;
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'No question existed';
+    }
+    echoRespnse(200, $response);
+});
+/**
+ * get questions by group name
+ * method GET
+ * url /question
+ */
+$app->get('/question/:name', function($name) use($app) {
+    
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->get_question_by_groupname($name);
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = $result;
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'NO available group.';
+    }
+    
+    echoRespnse(200, $response);
+});
+
+/**
+ * Listing question
+ * method GET
+ * url /question
+ */
+$app->put('/question', function() use($app){
+    
+    verifyRequiredParams(array('id','name'));
+    $id = $app->request->put('id');
+    $group_name = $app->request->put('name');
+    
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->update_question_group_num($id,$group_name);
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = $response;
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'update error';
+    }
+    echoRespnse(200, $response);
+});
+/**
+ * Create a question
+ * method POST
+ * url /question
+ * @param String $text question record
+ * @param int $group_id  id of group that question belong to
+ */
+$app->post('/question', function() use($app){
+    verifyRequiredParams(array('text', 'name'));
+    // reading post params
+    $text = $app->request()->post('text');
+    $group_name = $app->request()->post('name');
+    
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->add_question($text, $group_name );
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = 'Create succeed';
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'Create failed.';
+    }
+    
+    echoRespnse(200, $response);
+});
 
 /**
  * Listing questionnaire
@@ -165,74 +373,13 @@ $app->get('/questionnaire', function() {
     
     echoRespnse(200, $response);
 });
-
-
-
-$app->get('/', function() use ($app){
-    //$app->render('../view/login.html');
-    //$app->redirect('../view/login.html');
-    $app->render('login.html');
-});
 /**
- * User Login
- * url - /login
- * method - POST
- * params - email, password
+ * Insert question into questionnaire
+ * method POST
+ * url /questionnaire
+ * @param int $id question id        
  */
-$app->post('/login', function() use ($app) {
-    
-    //check for required params
-    verifyRequiredParams(array('username', 'password'));
-    // reading post params
-    $username = $app->request()->post('username');
-    $password = $app->request()->post('password');
-
-    $response = array();
-    
-        
-    $db = new DataHandler();
-    //check for correct email and password
-    $result = $db->check_login($username, $password);
-    if (is_bool($result) && $result) {
-        //get the user by email
-        //$user = $db->getUserByEmail($email);
-        $response["error"] = false;
-        $response['message'] = 'Login succeed'; 
-        //$response['url'] = 'Login succeed';
-        $app->render('home.html');
-        
-    } else {
-        // user credentials are wrong
-        $response['error'] = true;
-        $response['message'] = 'Login failed. ' . $result;
-    }
-    //$app->render('../view/home.html');
-    //$app->redirect('../view/home.html');
-    //echoRespnse(200, $response);
-});
-        
-$app->post('/group', function() use($app){
-    
-    verifyRequiredParams(array('name'));
-    // reading post params
-    $name = $app->request()->post('name');
-    
-    $response = array();
-    $db = new DataHandler();
-    
-    $result = $db->add_group($name);
-    if ($result) {
-        $response["error"] = false;
-        $response['message'] = 'Create succeed';
-    } else {
-        $response['error'] = true;
-        $response['message'] = 'Create failed.';
-    }
-    
-    echoRespnse(200, $response);
-});
-
-$app->delete('/group', function() use($app){
+$app->post('/questionnaire', function() use($app){
     
     verifyRequiredParams(array('id'));
     // reading post params
@@ -241,7 +388,24 @@ $app->delete('/group', function() use($app){
     $response = array();
     $db = new DataHandler();
     
-    $result = $db->delete_group($id);
+    $result = $db->insert_questionnaire($id);
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = $result;
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'NO available questionnaire.';
+    }
+    
+    echoRespnse(200, $response);
+});
+
+$app->delete('/questionnaire/:id', function($id) use($app){
+    
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->delete_questionnaire($id);
     if ($result) {
         $response["error"] = false;
         $response['message'] = 'Delete succeed';
@@ -252,6 +416,53 @@ $app->delete('/group', function() use($app){
     
     echoRespnse(200, $response);
 });
-      
 
-$app->run();  
+
+$app->get('/feedback', function() use($app){
+    
+    $response = array();
+    $db = new DataHandler();
+    $result = $db->get_fbsum_by_option();
+    
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = $result;
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'NO any feedback.';
+    }
+    
+    echoRespnse(200, $response);
+     
+});
+
+$app->post('/feedback', function() use($app){
+    //verifyRequiredParams(array('data'));
+//    $input = array();
+//    $input =$app->request()->getBody();
+    //$input =$app->request()->post('user');
+    //parse_str($app->request()->getBody(), $input);
+    //$input = json_decode($input);
+    //$input = urldecode($input);
+    //$input = json_decode($input);
+    
+   verifyRequiredParams(array('question_id','option_id'));
+
+    // reading post params
+    $question_id = $app->request()->post('question_id');
+    $option_id = $app->request()->post('option_id');
+    
+    $response = array();
+    $db = new DataHandler();
+    
+    $result = $db->insert_feedback($question_id,$option_id);
+    if ($result) {
+        $response["error"] = false;
+        $response['message'] = 'Succeed';
+    } else {
+        $response['error'] = true;
+        $response['message'] = 'Failed';
+    }
+    echoRespnse(200, $response);
+});
+$app->run();
